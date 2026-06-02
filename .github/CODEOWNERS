@@ -1,0 +1,3 @@
+# Require review from these owners for changes.
+# Pairs with branch protection: "Require review from Code Owners".
+*       @travis-edgar
