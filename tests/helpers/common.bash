@@ -51,3 +51,6 @@ teardown_mocks() {
 
 # skill_path - where the claude skill is rendered for the current TEST_HOME
 skill_path() { printf '%s/.claude/skills/hindsight/SKILL.md' "$TEST_HOME"; }
+
+# file_mode - octal perms of a file, portable across macOS (BSD) and Linux (GNU)
+file_mode() { stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"; }
