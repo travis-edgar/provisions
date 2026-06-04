@@ -8,9 +8,11 @@
 #
 # Required env:
 #   HINDSIGHT_API_KEY      Hindsight Cloud API key            (secret)
-#   HINDSIGHT_BANK_ID      Memory bank / namespace id         (e.g. team-myproject)
 #
 # Optional env:
+#   HINDSIGHT_BANK_ID      Team bank id. If set -> team mode (one shared bank).
+#                          If unset -> personal mode (dual banks derived at runtime).
+#   HINDSIGHT_BANK_PREFIX  Personal-mode bank prefix          (default: me)
 #   HINDSIGHT_API_URL      Cloud API base URL        (default: https://api.hindsight.vectorize.io)
 #   HINDSIGHT_APP          Target agent(s): auto | all | claude | codex | opencode,
 #                          or a comma-separated list           (default: auto)
@@ -37,6 +39,8 @@ warn() { printf '!!  %s\n' "$*" >&2; }
 # Personal mode: HINDSIGHT_BANK_ID unset -> dual banks derived at runtime
 # (<prefix>-core + <prefix>-<repo-slug>); HINDSIGHT_BANK_PREFIX defaults to "me".
 HINDSIGHT_BANK_ID="${HINDSIGHT_BANK_ID:-}"
+# Trim surrounding whitespace so a blank-ish HINDSIGHT_BANK_ID -> personal mode
+HINDSIGHT_BANK_ID="$(printf '%s' "$HINDSIGHT_BANK_ID" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
 HINDSIGHT_BANK_PREFIX="${HINDSIGHT_BANK_PREFIX:-me}"
 
 # ---- Optional configuration -------------------------------------------------
@@ -230,5 +234,9 @@ done
 # ---- Done -------------------------------------------------------------------
 log "Done."
 printf '    CLI:    %s\n' "$(command -v hindsight || echo 'NOT FOUND on PATH — set HINDSIGHT_INSTALL_DIR to a dir on PATH')"
-printf '    Config: %s (api_url=%s, bank=%s)\n' "$HOME/.hindsight/config" "$HINDSIGHT_API_URL" "$HINDSIGHT_BANK_ID"
+if [ -n "$HINDSIGHT_BANK_ID" ]; then
+  printf '    Config: %s (api_url=%s, bank=%s)\n' "$HOME/.hindsight/config" "$HINDSIGHT_API_URL" "$HINDSIGHT_BANK_ID"
+else
+  printf '    Config: %s (api_url=%s, banks=%s-core + %s-<repo-slug>)\n' "$HOME/.hindsight/config" "$HINDSIGHT_API_URL" "$HINDSIGHT_BANK_PREFIX" "$HINDSIGHT_BANK_PREFIX"
+fi
 printf '    Apps:   %s\n' "${APPS[*]}"
