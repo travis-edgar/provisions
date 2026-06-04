@@ -31,7 +31,13 @@ warn() { printf '!!  %s\n' "$*" >&2; }
 
 # ---- Required configuration (no defaults; fail loud) ------------------------
 : "${HINDSIGHT_API_KEY:?HINDSIGHT_API_KEY is required (set it as a secret env var)}"
-: "${HINDSIGHT_BANK_ID:?HINDSIGHT_BANK_ID is required (your Hindsight memory bank id)}"
+
+# ---- Bank configuration -----------------------------------------------------
+# Team mode: HINDSIGHT_BANK_ID set -> one shared bank baked into the skill.
+# Personal mode: HINDSIGHT_BANK_ID unset -> dual banks derived at runtime
+# (<prefix>-core + <prefix>-<repo-slug>); HINDSIGHT_BANK_PREFIX defaults to "me".
+HINDSIGHT_BANK_ID="${HINDSIGHT_BANK_ID:-}"
+HINDSIGHT_BANK_PREFIX="${HINDSIGHT_BANK_PREFIX:-me}"
 
 # ---- Optional configuration -------------------------------------------------
 HINDSIGHT_API_URL="${HINDSIGHT_API_URL:-https://api.hindsight.vectorize.io}"
@@ -83,110 +89,136 @@ case "$HINDSIGHT_APP" in
   *)   IFS=',' read -r -a APPS <<< "$HINDSIGHT_APP" ;;
 esac
 
-# ---- 4) Render the SKILL.md (BANK_ID substituted) and install per app ------
-# Embedded with a quoted heredoc so backticks / $ stay literal; BANK_ID is a
-# placeholder substituted via bash parameter expansion (delimiter-safe).
-SKILL_RAW="$(cat <<'SKILL_EOF'
+# ---- 4) Render the SKILL.md and install per app ----------------------------
+# Two render functions, each using a quoted heredoc so backticks / $ stay
+# literal inside. Mode is selected by whether HINDSIGHT_BANK_ID is set.
+
+render_team_skill() {
+cat <<'SKILL_EOF'
 ---
 name: hindsight
 description: Store team knowledge, project conventions, and learnings from tasks. Use to remember what works and recall context before new tasks. This is a shared team memory bank.
 ---
 
-# Hindsight Memory Skill (Cloud)
+# Hindsight Memory Skill (Cloud, team bank)
 
-You have persistent memory via **Hindsight Cloud**. This memory bank is **shared with the team**, so knowledge stored here benefits everyone working on this codebase.
-
-**Proactively store team knowledge and recall context** to provide better assistance.
+You have persistent memory via the **Hindsight CLI** (`hindsight`). This bank is **shared with the team**, so knowledge stored here benefits everyone on this codebase.
 
 ## Commands
 
-### Store a memory
-
-Use `memory retain` to store what you learn:
+Store (`retain`):
 
 ```bash
-hindsight memory retain BANK_ID "Project uses ESLint with Airbnb config and Prettier for formatting"
-hindsight memory retain BANK_ID "Running tests requires NODE_ENV=test" --context procedures
-hindsight memory retain BANK_ID "Build failed when using Node 18, works with Node 20" --context learnings
-hindsight memory retain BANK_ID "Alice prefers verbose commit messages with context" --context preferences
+hindsight memory retain BANK_ID "Project uses ESLint (Airbnb) + Prettier" --context procedures
+hindsight memory retain BANK_ID "Build fails on Node 18, works on Node 20" --context learnings
+hindsight memory retain BANK_ID "Chose Postgres over Mongo for strong consistency" --context decision
 ```
 
-### Recall memories
-
-Use `memory recall` BEFORE starting tasks to get relevant context:
+Recall (`recall`) BEFORE starting tasks:
 
 ```bash
-hindsight memory recall BANK_ID "project conventions and coding standards"
-hindsight memory recall BANK_ID "Alice preferences for this project"
-hindsight memory recall BANK_ID "what issues have we encountered before"
-hindsight memory recall BANK_ID "how does the auth module work"
+hindsight memory recall BANK_ID "project conventions and coding standards" --budget mid
+hindsight memory recall BANK_ID "issues we have hit before" --fact-type experience
 ```
 
-### Reflect on memories
-
-Use `memory reflect` to synthesize context:
+Reflect (`reflect`) to synthesize:
 
 ```bash
-hindsight memory reflect BANK_ID "How should I approach this task based on past experience?"
+hindsight memory reflect BANK_ID "How should I approach this based on past work?" --budget high
 ```
 
-## IMPORTANT: When to Store Memories
+`recall` accepts `--budget low|mid|high` and `--fact-type world|experience|opinion`. `retain` accepts `--context <label>` and `-d/--doc-id <id>` for idempotent updates.
 
-This is a **shared team bank**. Store knowledge that benefits the team. For individual preferences, include the persons name.
+## Context labels
 
-### Project/Team Conventions (shared)
-- Coding standards ("Project uses 2-space indentation")
-- Required tools and versions ("Project requires Node 20+, PostgreSQL 15+")
-- Linting and formatting rules ("ESLint with Airbnb config")
-- Testing conventions ("Integration tests require Docker running")
-- Branch naming and PR conventions
+Use one of: `decision`, `gotcha`, `pattern`, `procedures`, `learnings`, `preferences`.
 
-### Individual Preferences (attribute to person)
-- Personal coding style ("Alice prefers explicit type annotations")
-- Communication preferences ("Bob prefers detailed PR descriptions")
-- Tool preferences ("Carol uses vim keybindings")
+## When to store (do not wait to be asked)
 
-### Procedure Outcomes
-- Steps that successfully completed a task
-- Commands that worked (or failed) and why
-- Workarounds discovered
-- Configuration that resolved issues
+- A decision was made → `--context decision`
+- A bug/gotcha was solved → `--context gotcha`
+- A reusable pattern emerged → `--context pattern`
+- A command/config that worked or failed → `--context procedures`/`learnings`
+- Individual preference → `--context preferences`, and name the person ("Alice prefers …")
 
-### Learnings from Tasks
-- Bugs encountered and their solutions
-- Performance optimizations that worked
-- Architecture decisions and rationale
-- Dependencies or version requirements
+## When to recall
 
-### Team Knowledge
-- Onboarding information for new team members
-- Common pitfalls and how to avoid them
-- Architecture decisions and their rationale
-- Integration points with external systems
-- Domain knowledge and business logic explanations
-
-## IMPORTANT: When to Recall Memories
-
-**Always recall** before:
-- Starting any non-trivial task
-- Making decisions about implementation
-- Suggesting tools, libraries, or approaches
-- Writing code in a new area of the project
-- When answering questions about the codebase
-- When a team member asks how something works
-
-## Best Practices
-
-1. **Store immediately**: When you discover something, store it right away
-2. **Be specific**: Store "npm test requires --experimental-vm-modules flag" not "tests need a flag"
-3. **Include outcomes**: Store what worked AND what did not work
-4. **Recall first**: Always check for relevant context before starting work
-5. **Think team-first**: Store knowledge that would help other team members
-6. **Attribute individual preferences**: Store "Alice prefers X" not just "User prefers X"
-7. **Distinguish project vs personal**: Project conventions apply to everyone; personal preferences are per-person
+Always recall before: starting a non-trivial task, choosing tools/libraries/approaches, writing code in a new area, or answering "how does X work?"
 SKILL_EOF
-)"
-SKILL_MD="${SKILL_RAW//BANK_ID/$HINDSIGHT_BANK_ID}"
+}
+
+render_personal_skill() {
+cat <<'SKILL_EOF'
+---
+name: hindsight
+description: Persistent personal memory via the Hindsight CLI. Capture decisions, gotchas, and patterns; recall context before non-trivial work. Routes knowledge between a cross-project core bank and a per-project bank.
+---
+
+# Hindsight Memory Skill (CLI, personal dual-bank)
+
+You have persistent memory via the **Hindsight CLI** (`hindsight`), split across two banks:
+
+- **Core bank — `PREFIX-core`** — knowledge that survives project/role changes: preferences, reusable patterns, people, career decisions, cross-project gotchas.
+- **Project bank — `PREFIX-<repo-slug>`** — codebase-specific: architecture decisions, project gotchas, session notes. Derive `<repo-slug>` from the current git repo's directory name, lowercased, with runs of non-alphanumerics collapsed to single hyphens (e.g. `One-Cloud_Costs` → `PREFIX-one-cloud-costs`).
+
+## Routing — which bank?
+
+Ask: "Would this help me on a completely different project?"
+
+| Answer | Bank |
+|--------|------|
+| Yes — preference, reusable pattern, person, cross-project gotcha | `PREFIX-core` |
+| No — references files/modules/services in this repo | `PREFIX-<repo-slug>` |
+| Maybe / cross-cutting | retain to both |
+
+## Commands
+
+Store (`retain`):
+
+```bash
+hindsight memory retain PREFIX-core "I prefer squash-merge for feature branches" --context preferences
+hindsight memory retain PREFIX-<repo-slug> "Auth tokens refresh via /oauth/refresh; 401 retries once" --context gotcha
+```
+
+Recall (`recall`) BEFORE non-trivial work:
+
+```bash
+hindsight memory recall PREFIX-<repo-slug> "auth architecture and known issues" --budget mid
+hindsight memory recall PREFIX-core "my testing conventions" --fact-type experience
+```
+
+Reflect (`reflect`) to synthesize:
+
+```bash
+hindsight memory reflect PREFIX-core "What patterns recur across my projects?" --budget high
+```
+
+`recall` accepts `--budget low|mid|high` and `--fact-type world|experience|opinion`. `retain` accepts `--context <label>` and `-d/--doc-id <id>` for idempotent updates.
+
+## Context labels
+
+Use one of: `decision`, `gotcha`, `pattern`, `procedures`, `learnings`, `preferences`.
+
+## When to capture (do not wait to be asked)
+
+- A decision was made → `--context decision` (route per the table above)
+- A bug/gotcha was solved → `--context gotcha`
+- A reusable pattern emerged → `--context pattern` (usually `PREFIX-core`)
+- Work completed → retain a short session note
+
+## When to recall
+
+Always recall before: starting non-trivial work, choosing tools/approaches, working in a new area, or answering "how does X work?"
+SKILL_EOF
+}
+
+if [ -n "$HINDSIGHT_BANK_ID" ]; then
+  SKILL_MD="$(render_team_skill)"
+  SKILL_MD="${SKILL_MD//BANK_ID/$HINDSIGHT_BANK_ID}"
+else
+  SKILL_MD="$(render_personal_skill)"
+  SKILL_MD="${SKILL_MD//PREFIX/$HINDSIGHT_BANK_PREFIX}"
+fi
 
 for app in "${APPS[@]}"; do
   dir="$(skills_dir_for "$app")" || { warn "unknown app '$app' (use claude|codex|opencode) — skipping"; continue; }

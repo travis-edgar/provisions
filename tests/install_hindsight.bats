@@ -23,3 +23,16 @@ teardown() {
     [ -f "$(skill_path)" ]
     grep -q "team-myproject" "$(skill_path)"
 }
+
+@test "personal mode: BANK_ID unset renders dual-bank skill with prefix" {
+    unset HINDSIGHT_BANK_ID
+    export HINDSIGHT_BANK_PREFIX="travis"
+
+    run bash "$INSTALL_SCRIPT"
+
+    [ "$status" -eq 0 ]
+    [ -f "$(skill_path)" ]
+    grep -q "travis-core" "$(skill_path)"
+    grep -qi "repo-slug" "$(skill_path)"
+    grep -qi "Routing" "$(skill_path)"
+}
