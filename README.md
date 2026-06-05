@@ -22,7 +22,8 @@ integration into Claude Code and/or Codex. It:
 | Variable | Required | Default | Notes |
 |---|:---:|---|---|
 | `HINDSIGHT_API_KEY` | ✅ | — | Hindsight Cloud API key (**secret**) |
-| `HINDSIGHT_BANK_ID` | ✅ | — | Memory bank / namespace id |
+| `HINDSIGHT_BANK_ID` | | — | Set → **team mode** (one shared bank). Unset → **personal mode** (dual banks derived at runtime). |
+| `HINDSIGHT_BANK_PREFIX` | | `me` | Personal-mode bank prefix → `<prefix>-core` + `<prefix>-<repo-slug>` |
 | `HINDSIGHT_API_URL` | | `https://api.hindsight.vectorize.io` | Override for self-hosted |
 | `HINDSIGHT_APP` | | `auto` | `auto` \| `all` \| `claude` \| `codex` \| `opencode`, or a comma list |
 | `HINDSIGHT_CLI_VERSION` | | latest (auto-resolved) | Pin for reproducible installs, e.g. `v0.7.1` |
