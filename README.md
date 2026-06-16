@@ -46,6 +46,40 @@ and `raw.githubusercontent.com` (to fetch the script itself).
 
 ---
 
+## `install-gh.sh`
+
+Non-interactively installs the GitHub CLI (`gh`) into Claude Code and/or Codex environments.
+Useful for automated workflows that need direct GitHub API access or repository operations
+via `gh run`, `gh pr`, `gh issue`, etc.
+
+### Configuration (environment variables)
+
+| Variable | Required | Default | Notes |
+|---|:---:|---|---|
+| `GH_TOKEN` or `GITHUB_TOKEN` | | — | GitHub Personal Access Token (**secret**). Scopes: `repo`, `workflow`. If set, wires git to use gh credentials. |
+| `GH_VERSION` | | latest (auto-resolved) | Pin gh version for reproducible installs, e.g. `2.63.0` |
+| `GH_INSTALL_DIR` | | `~/.local/bin` | CLI install location (must be on `PATH`) |
+
+### Usage (in a hosted environment's setup script)
+
+If you need GitHub API access, set `GH_TOKEN` as a **secret environment variable** in your
+cloud setup, then fetch the script **pinned to a commit SHA**:
+
+```bash
+export GH_TOKEN="$YOUR_SECRET_GITHUB_TOKEN"
+curl -fsSL https://raw.githubusercontent.com/travis-edgar/provisions/<COMMIT_SHA>/install-gh.sh | bash
+```
+
+If no `GH_TOKEN` is set, `gh` installs but runs unauthenticated (subject to GitHub's 60
+req/hr per-IP rate limit).
+
+### Network egress required
+
+`github.com` + `objects.githubusercontent.com` (release CDN), and `raw.githubusercontent.com`
+(to fetch the script itself).
+
+---
+
 ## Conventions
 
 - **No secrets, no private-repo references.** If a value is environment-specific, it's an env var.
